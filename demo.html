@@ -1,0 +1,291 @@
+<!--
+  Author: Heidi Cho and Megan Shum
+  Date: December 2018
+  Purpose: CS 307 Contribution Library
+  Version: Beta/Final
+  VERSION UPDATE DETAILS: The ballloon is now transparent, the texture mapping of 
+  the buildings have been updated, and the characters and ballon now cast shadows as well. 
+  We've added user interaction, so that when the user presses "n", the scene changes
+  to night time. If they press "d", it changes back to day time. 
+  Finally, we've moved our helper functions into a file called helperFunctions.js,
+  since it was redundant to define them in all of our files.
+
+  This is the official, HTML demo file featuring the shopping district in the
+  Nintendo Franchise game Animal Crossing. The scene has Tom Nook, owner of 
+  Nook N' Go and Nook Homes, the mayor's secretary Isabelle, and co-mayors Heidi
+  and Megan!
+  
+  The file calls functions in other files to create the sky, scenery, and characters,
+  and has functions in this file to animate a floating balloon.
+-->
+
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>MainScene</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+	</head>
+	<body>
+		<div id="container"></div>
+		<script src="libs/three.min.js"></script>
+	    <script src="libs/tw.js"></script>
+	    <script src="libs/OrbitControls.js"></script>
+	    <script src="libs/dat.gui.min.js"></script>
+		<!--<script src="../libs/WebGL.js"></script>-->
+		
+        <script src="mainStreet.js"></script>
+		<script src="sky.js"></script>
+		<script src="tomNook.js"></script>
+		<script src="isabelle.js"></script>
+		<script src="person.js"></script>
+		<script src="helperFunctions.js"></script>
+
+		<script>
+			var container, camera, scene, renderer, light;
+			/*-------------------- Balloon Parameters -------------------------*/
+			var balloonObj;
+			var skyRadius = 60;
+			var balloonParams = {initX: -10, initY: 18, initZ: 10, Vx: 1, deltaT: 0.05};
+			init();
+			
+			function init() {
+				/*----------------------------------------------------------
+			    SCENE, CONTAINER, RENDERER
+			    ----------------------------------------------------------*/
+				container = document.getElementById( 'container' );
+				renderer = new THREE.WebGLRenderer();
+				renderer.shadowMap.enabled = true;
+				renderer.setPixelRatio( window.devicePixelRatio );
+				renderer.setSize( window.innerWidth, window.innerHeight );
+				container.appendChild( renderer.domElement );
+				
+				scene = new THREE.Scene();
+				
+				/*----------------------------------------------------------
+			    CREATING SCENERY
+			    ----------------------------------------------------------*/
+            	createTown(scene);
+            	createSky(scene, skyRadius, "img/sky.jpg");
+				
+				/*----------------------------------------------------------
+			    CREATING CHARACTERS
+			    ----------------------------------------------------------*/
+			    createNook(scene, 15, 0, 10);
+			    createIsabelle(scene, -7, 0, 5);
+			    
+			    //shirt image, sleeves image, hair color
+			    createPerson(scene, 8, 0, 0, 0, "img/megan_shirt.jpg", "img/megan_sleeves.jpg", 0xa38ad8);
+			    createPerson(scene, -18, 0, 15, -Math.PI/6, "img/heidi_shirt.jpg", "img/heidi_sleeves.jpg", 0xe57386);
+			    
+			    /*----------------------------------------------------------
+			    CREATE LIGHTS
+			    ----------------------------------------------------------*/
+				// add ambient light to the scene
+                var ambLight = new THREE.AmbientLight(0xffffff, 0.8);
+                scene.add(ambLight);
+                
+                // add a spotlight that can cast shadows
+                spotLight = new THREE.SpotLight( 0xFFFFFF, .35);
+                spotLight.angle = Math.PI / 3;
+                spotLight.penumbra = 1;
+                spotLight.position.set( 25, 40, 40 );
+                spotLight.castShadow = true;
+                spotLight.shadow.mapSize.width = 2048;
+                spotLight.shadow.mapSize.height = 2048;
+                scene.add( spotLight );
+
+                /*----------------------------------------------------------
+			    CAMERA AND ORBITAL CONTROLS
+			    ----------------------------------------------------------*/
+                camera = new THREE.PerspectiveCamera( 55, window.innerWidth / window.innerHeight, 1, 200);
+				camera.position.set( 0, 5, 45);
+				controls = new THREE.OrbitControls( camera, renderer.domElement );
+				controls.maxPolarAngle = Math.PI * 0.495;
+				controls.target.set( 0, 5, 0);
+				controls.minDistance = 0.0;
+				controls.maxDistance = 55.0;
+				camera.lookAt( controls.target );
+				
+				/*----------------------------------------------------------
+			    EVENT LISTENER FOR RESIZING WINDOW AND USER KEY PRESSES
+			    ----------------------------------------------------------*/
+				window.addEventListener( 'resize', onWindowResize, false );
+				
+				document.addEventListener('keydown', function(event) {
+					var sky = scene.getObjectByName( "sky" );
+				    if(event.keyCode == 78) {
+				        scene.remove(sky);
+				        scene.remove(spotLight);
+				        createSky(scene, skyRadius, "img/night.jpg");
+				        render();
+				    } else if (event.keyCode == 68) {
+				    	scene.remove(sky);
+				    	scene.add(spotLight);
+				        createSky(scene, skyRadius, "img/sky.jpg");
+				        render();
+				    }
+				});
+			}
+			
+			
+			/*----------------------------------------------------------
+			FUNCTION FOR RESIZING WINDOW
+			----------------------------------------------------------*/
+			function onWindowResize() {
+				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.updateProjectionMatrix();
+				renderer.setSize( window.innerWidth, window.innerHeight );
+			}
+			
+			/*----------------------------------------------------------
+			 ADDS FLOATING BALLOON TO SCENE
+			----------------------------------------------------------*/
+			// Note that this function will be moved into a separate file for
+			// modularity, but we were not able to figure out how to for the 
+			// alpha version
+			function createBalloon(scene){
+				var params = {presentSize: 1, stringRadius: 0.03, stringLen: 3, 
+								shine: 20, balloonColor: 0xFF0000, stringColor: 0x000000}
+			    balloonObj = new THREE.Object3D();
+			    
+			    // create balloon
+			    var balloonPoints = createBalloonSpline();
+			    var balloonGeo = new THREE.LatheGeometry(balloonPoints.geometry.vertices, 50);
+			    var balloonMat = new THREE.MeshPhongMaterial({color: params.balloonColor, shininess: params.shine, 
+			                                                    specular: THREE.ColorKeywords.white,
+			                                                    shading: THREE.SmoothShading,
+			    												transparent: true,
+                                        						opacity: 0.6});
+			    var balloon = new THREE.Mesh(balloonGeo, balloonMat);
+			    balloon.castShadow = true;
+			    
+			    //create the string
+			    var stringGeom = new THREE.CylinderGeometry(params.stringRadius, params.stringRadius, params.stringLen, 32 );
+			    var stringMat = new THREE.MeshBasicMaterial( {color: params.stringColor} );
+			    var string = new THREE.Mesh( stringGeom, stringMat );
+			    
+			    //create the present
+			    var loader = new THREE.TextureLoader();
+				var texture = loader.load("img/present.jpg");
+			    var presentGeom = new THREE.BoxGeometry(params.presentSize, params.presentSize, params.presentSize);
+			    var presentMat = new THREE.MeshPhongMaterial( {color: 0xffffff, map:texture, shininess: params.shine} );
+			    var present = new THREE.Mesh(presentGeom, presentMat);
+			    present.castShadow = true;
+			    
+			    balloon.position.set(0,params.presentSize+params.stringLen,0);
+			    string.position.set(0,params.presentSize + params.stringLen/2,0);
+			    present.position.set(0,params.presentSize/2,0);
+			    balloonObj.add(present);
+			    balloonObj.add(balloon);
+			    balloonObj.add(string);
+			    balloonObj.position.set(balloonParams.initX,balloonParams.initY,balloonParams.initZ);
+			    scene.add(balloonObj);
+			}
+			
+			/*----------------------------------------------------------
+			CREATE BALLOON OBJECT
+			----------------------------------------------------------*/
+			function createBalloonSpline() {
+			    var upper_seg = [ [0.0, 2.4, 0.0],
+			    [0.6, 2.4, 0.0],
+			    [1.5, 1.8, 0.0],
+			    [0.9, 1.6, 0.0]
+			    [0.8, 1.55, 0.0]];
+			    
+			    var mid_lower_seg = [ [0.8, 1.6, 0.0],
+			    [0.8, 1.5, 0.0],
+			    [0.6, 1.0, 0.0],
+			    [0.3, 0.6, 0.0] ];
+			    
+			    var lower_seg = [ [-0.2, 0, 0.0],
+			    [0.2, 0.0, 0.0],
+			    [0, 0.0, 0.0],
+			    [0, 0, 0.0] ];
+			    
+			    var curve1 = new THREE.CubicBezierCurve3(makeVertex(upper_seg[0]),
+			    makeVertex(upper_seg[1]),
+			    makeVertex(upper_seg[2]),
+			    makeVertex(upper_seg[3]));
+			    
+			    var curve4 = new THREE.CubicBezierCurve3(makeVertex(lower_seg[0]),
+			    makeVertex(lower_seg[1]),
+			    makeVertex(lower_seg[2]),
+			    makeVertex(lower_seg[3]));
+			    
+			    var geo = new THREE.Geometry();
+			    
+			    geo.vertices = Array.prototype.concat(curve1.getPoints(40),
+			    curve4.getPoints(40) );       //Combines curves
+			    
+			    var balloonSpline = new THREE.Line(geo, new THREE.LineBasicMaterial()); //Creates Spline
+			    return balloonSpline;
+			}
+			  
+			createBalloon(scene);
+			
+			// state variables of the animation
+			var animationState;
+			
+			// reset animation to initial state
+			function resetAnimationState () {
+				
+			    animationState = {
+			        time: 0,
+			        x: balloonParams.initX,      // current position of balloon
+			        vx: balloonParams.Vx,    // current velocity of balloon
+			    };
+			    balloonObj.position.x = animationState.x;
+			}
+			
+			// resets the animation to the initial state and renders the scene
+			function firstState(){
+			    resetAnimationState();
+			    render();
+			}
+			
+			// updates the state of the animation 
+			function updateState () {
+			    // changes the time and everything that depends on time
+			    // animation stops when balloon reaches outer bounds of scene
+			    if ( animationState.x < skyRadius) {
+				    var dt = balloonParams.deltaT;
+				    animationState.time += dt;
+				
+				    // change balloon location
+				    animationState.x += animationState.vx * dt;
+				    balloonObj.position.x = animationState.x;
+			    }
+			}
+
+			// performs one step of the animation
+			function oneStep () {
+			    updateState();
+			    render();
+			    //TW.render();
+			}
+			
+			function animate() {
+				oneStep();
+				requestAnimationFrame( animate );
+				render();
+			}
+
+			function render() {
+				renderer.render( scene, camera );
+			}
+			
+			firstState();
+			animate();
+		</script>
+		<div data-video="4uj896lr3-E"  
+	         data-autoplay="1"         
+	         data-loop="1"             
+	         id="youtube-audio"
+		</div>
+		<script src="https://www.youtube.com/iframe_api"></script>
+		<script src="https://cdn.rawgit.com/labnol/files/master/yt.js"></script>
+		<!-- We learnt how to add youtube audio via this link: 
+		https://www.labnol.org/internet/youtube-audio-player/26740/-->
+	</body>
+</html>
